@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.env
+.myenv/
+myenv/
+.venv/
+.DS_Store
+*.ipynb_checkpoints
+*.log
+Data_load/flight.db
