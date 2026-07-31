@@ -39,19 +39,18 @@ def get_latest_signal_val(signals_df: pd.DataFrame, signal_type: str, default: f
 
 
 def get_competitor_stats_by_route(signals_df: pd.DataFrame) -> dict:
-    """Extract competitor min/avg price per route and class.
-    Expected signal_type format: competitor_price_<class>
+    """Extract competitor min/avg price per route (all classes pooled).
+    DB stores signal_type as competitor_price_1, competitor_price_2, etc.
+    We aggregate all of them per route into a single min and mean.
     """
     comp_df = signals_df[signals_df["signal_type"].str.startswith("competitor_price")].copy()
     route_stats = {}
     if not comp_df.empty:
-        for (route, signal), group in comp_df.groupby(["route", "signal_type"]):
-            cls_name = signal.split("_")[-1]
-            stats = group["value"].agg(["min", "mean"]).to_dict()
-            if route not in route_stats:
-                route_stats[route] = {}
-            route_stats[route][f"competitor_min_price_{cls_name}"] = stats["min"]
-            route_stats[route][f"competitor_avg_price_{cls_name}"] = stats["mean"]
+        for route, group in comp_df.groupby("route"):
+            route_stats[route] = {
+                "competitor_min_price": group["value"].min(),
+                "competitor_avg_price": group["value"].mean(),
+            }
     return route_stats
 
 
@@ -114,16 +113,14 @@ def prepare_dataset():
     df["price_vs_competitor_ratio"] = np.nan
     df["competitor_data_is_real"] = False
 
-    def comp_min(route, cls):
-        key = f"competitor_min_price_{cls.lower()}"
-        return competitor_stats.get(route, {}).get(key, np.nan)
+    def comp_min(route):
+        return competitor_stats.get(route, {}).get("competitor_min_price", np.nan)
 
-    def comp_avg(route, cls):
-        key = f"competitor_avg_price_{cls.lower()}"
-        return competitor_stats.get(route, {}).get(key, np.nan)
+    def comp_avg(route):
+        return competitor_stats.get(route, {}).get("competitor_avg_price", np.nan)
 
-    df["competitor_min_price"] = df.apply(lambda r: comp_min(r["route"], r["flight_class"]), axis=1)
-    df["competitor_avg_price"] = df.apply(lambda r: comp_avg(r["route"], r["flight_class"]), axis=1)
+    df["competitor_min_price"] = df["route"].apply(comp_min)
+    df["competitor_avg_price"] = df["route"].apply(comp_avg)
     df["price_vs_competitor_ratio"] = df["current_price"] / df["competitor_avg_price"]
     df["competitor_data_is_real"] = df["route"].isin(real_competitor_routes)
 

@@ -137,12 +137,15 @@ def transform_to_pia_style(df: pd.DataFrame) -> pd.DataFrame:
                     flight_class, is_international,
                 ),
                 "total_seats": 180,
-                # Booking probability inversely related to price percentile; add +/-15% noise
+                # Blend a price-based signal with independent randomness so
+                # demand is less deterministically tied to price.
                 "booked_seats": int(
                     max(20,
                         min(175,
-                            (1 - record["price_percentile"]) * 180 *
-                            random.uniform(0.85, 1.15)
+                            (
+                                0.5 * (1 - record["price_percentile"]) +
+                                0.5 * random.random()
+                            ) * 180
                         )
                     )
                 ),

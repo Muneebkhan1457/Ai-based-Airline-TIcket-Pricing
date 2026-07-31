@@ -1,12 +1,27 @@
+# Python bytecode and caches
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
 .env
 .myenv/
 myenv/
 .venv/
-.DS_Store
+
+# Jupyter / notebooks
 *.ipynb_checkpoints
+
+# OS/editor noise
+.DS_Store
 *.log
+
+# Project data artifacts and generated files
 Data_load/flight.db
+Data_load/raw/
+Data_load/internal/generated/
+models/*.pkl
+models/training_dataset.csv
