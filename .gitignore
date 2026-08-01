@@ -25,3 +25,14 @@ Data_load/raw/
 Data_load/internal/generated/
 models/*.pkl
 models/training_dataset.csv
+FULL_CODE_DUMP.md
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+

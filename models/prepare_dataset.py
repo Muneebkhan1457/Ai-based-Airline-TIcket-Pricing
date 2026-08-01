@@ -54,9 +54,9 @@ def get_competitor_stats_by_route(signals_df: pd.DataFrame) -> dict:
     return route_stats
 
 
-def generate_time_varying_signal(base: float, days: np.ndarray) -> np.ndarray:
+def generate_time_varying_signal(base: float, count: int) -> np.ndarray:
     """Random noise around the baseline macro signal (±10 units)."""
-    noise = np.random.uniform(-10, 10, size=days.shape)
+    noise = np.random.uniform(-10, 10, size=count)
     return base + noise
 
 
@@ -99,12 +99,12 @@ def prepare_dataset():
     # Base fare per route & class (mean of current_price)
     df["base_fare"] = df.groupby(["route", "flight_class"])["current_price"].transform('mean')
 
-    # Macro signals varying with booking date offset
-    min_booking = df["booking_date"].min()
-    days_since_start = (df["booking_date"] - min_booking).dt.days.values
-    df["petrol_price"] = generate_time_varying_signal(base_petrol, days_since_start)
-    df["diesel_price"] = generate_time_varying_signal(base_diesel, days_since_start)
-    df["usd_to_pkr"] = generate_time_varying_signal(base_usd, days_since_start)
+    # Random per-row noise around the baseline macro signal — NOT tied to
+    # any real date, since we only have one real snapshot per signal
+    row_count = len(df)
+    df["petrol_price"] = generate_time_varying_signal(base_petrol, row_count)
+    df["diesel_price"] = generate_time_varying_signal(base_diesel, row_count)
+    df["usd_to_pkr"] = generate_time_varying_signal(base_usd, row_count)
 
     # Competitor pricing – real data only, NaN otherwise
     real_competitor_routes = {"KHI-LHE", "KHI-ISB"}

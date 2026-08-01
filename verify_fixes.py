@@ -1,10 +1,13 @@
+import os
 import pandas as pd
 import numpy as np
 import subprocess
 import sys
+from pathlib import Path
 
 # Paths
-TRAINING_CSV = "models/training_dataset.csv"
+ROOT = Path(__file__).resolve().parent
+TRAINING_CSV = ROOT / "models" / "training_dataset.csv"
 
 def main():
     # Load dataset
@@ -51,7 +54,7 @@ def main():
 
     # Folder tree (PowerShell Get-ChildItem -Recurse)
     try:
-        result_tree = subprocess.run(["powershell", "-Command", "Get-ChildItem -Recurse | ForEach-Object { $_.FullName }"], capture_output=True, text=True, check=False)
+        result_tree = subprocess.run(["powershell", "-Command", f"Get-ChildItem -Path '{ROOT}' -Recurse | ForEach-Object {{ $_.FullName }}"], capture_output=True, text=True, check=False)
         print("\n--- Folder Tree ---")
         print(result_tree.stdout)
     except Exception as e:

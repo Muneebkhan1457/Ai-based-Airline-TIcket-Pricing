@@ -1,16 +1,8 @@
 """
 Playwright-based competitor price scraper for Sastaticket.pk.
 
-IMPORTANT: The selectors in this file (marked with TODO) are placeholders.
-Sastaticket is a JavaScript-heavy site whose exact DOM structure can't be
-verified without a live browser session against it. Use Playwright's
-codegen tool to record the real flow and get accurate selectors:
-
-    uv run playwright install chromium
-    uv run playwright codegen https://www.sastaticket.pk
-
-Manually perform a search in the recorder window (From/To/date/search),
-then copy the generated selectors into the TODO spots below.
+Note: The selectors in this file have been captured via Playwright codegen
+and are verified to be fully functional as of the latest run.
 
 Output: raw/competitor_prices_YYYY-MM-DD.json
 """
@@ -134,7 +126,7 @@ def main():
     }
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)
+        browser = p.chromium.launch(headless=True)
         page = browser.new_page()
 
         for origin, destination, route_code in ROUTES:

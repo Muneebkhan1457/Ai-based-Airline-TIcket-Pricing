@@ -82,6 +82,13 @@ def main():
     conn = sqlite3.connect(DB_PATH)
     ensure_table(conn)
 
+    # Safety duplicate-insertion check/clearing
+    existing_count = conn.execute("SELECT COUNT(*) FROM flights").fetchone()[0]
+    if existing_count > 0:
+        print(f"Safety check triggered: {existing_count} existing rows found in flights table. Clearing them to prevent double-insertion...")
+        conn.execute("DELETE FROM flights")
+        conn.commit()
+
     sample = load_sample(CSV_PATH, SAMPLE_SIZE)
     inserted = insert_rows(conn, sample)
 
