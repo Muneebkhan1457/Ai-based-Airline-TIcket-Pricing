@@ -5,12 +5,18 @@ __pycache__/
 *.pyd
 .pytest_cache/
 .mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
 
 # Virtual environments
 .env
+.env.*
+!.env.example
 .myenv/
 myenv/
 .venv/
+venv/
 
 # Jupyter / notebooks
 *.ipynb_checkpoints
@@ -18,12 +24,29 @@ myenv/
 # OS/editor noise
 .DS_Store
 *.log
+Thumbs.db
+
+# Local runtime/cache artifacts
+.uv-cache/
+.tmp/
+tmp/
+
+# Databases and local persistence
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-shm
+*.db-wal
+Data_load/flight.db
 
 # Project data artifacts and generated files
-Data_load/flight.db
 Data_load/raw/
 Data_load/internal/generated/
 models/*.pkl
+models/*.joblib
+models/*.model
+models/*.onnx
 models/training_dataset.csv
 FULL_CODE_DUMP.md
 
@@ -35,4 +58,3 @@ FULL_CODE_DUMP.md
 *.njsproj
 *.sln
 *.swp
-
