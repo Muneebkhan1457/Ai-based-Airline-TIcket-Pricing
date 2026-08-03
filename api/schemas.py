@@ -18,6 +18,18 @@ class PriceRecommendationResponse(BaseModel):
     candidates_evaluated: int
     competitor_data_is_real: bool
 
+class DemandAtPriceRequest(BaseModel):
+    route: str
+    flight_class: str
+    days_to_departure: int
+    price: float
+
+class DemandAtPriceResponse(BaseModel):
+    route: str
+    flight_class: str
+    price: float
+    predicted_demand_ratio: float
+
 class HealthResponse(BaseModel):
     status: str
     database_connected: bool

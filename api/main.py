@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 
 from api.schemas import (
     PriceRecommendationRequest, PriceRecommendationResponse,
+    DemandAtPriceRequest, DemandAtPriceResponse,
     HealthResponse, ETLTriggerResponse
 )
 from api import services
@@ -19,6 +20,15 @@ def recommend_price(req: PriceRecommendationRequest):
         return services.get_price_recommendation(
             req.route, req.flight_class, req.days_to_departure,
             req.total_seats, req.remaining_seats
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/pricing/predict-demand-at-price", response_model=DemandAtPriceResponse)
+def predict_demand_at_price_endpoint(req: DemandAtPriceRequest):
+    try:
+        return services.get_demand_at_price(
+            req.route, req.flight_class, req.days_to_departure, req.price
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))

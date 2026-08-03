@@ -107,16 +107,15 @@ with tab2:
         prices = list(range(5000, 100000, 5000))
         demands = []
         with st.spinner("Simulating..."):
-            for _price in prices:
+            for price in prices:
                 try:
                     resp = requests.post(
-                        f"{API_BASE_URL}/pricing/recommend",
+                        f"{API_BASE_URL}/pricing/predict-demand-at-price",
                         json={
                             "route": sim_route,
                             "flight_class": sim_class,
                             "days_to_departure": sim_days,
-                            "total_seats": 180,
-                            "remaining_seats": 90,
+                            "price": price,
                         },
                         timeout=30,
                     )
@@ -124,11 +123,6 @@ with tab2:
                 except Exception:
                     demands.append(None)
         st.line_chart({"price": prices, "predicted_demand": demands}, x="price", y="predicted_demand")
-        st.caption(
-            "Note: this calls /pricing/recommend repeatedly, which re-optimizes each time rather than holding price "
-            "fixed -- a true elasticity curve would need a dedicated /pricing/predict-demand-at-price endpoint. "
-            "Flag this as a possible future improvement."
-        )
 
 # --- Tab 3: Market Signal Monitor ---
 with tab3:
