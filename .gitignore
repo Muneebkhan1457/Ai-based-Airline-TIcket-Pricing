@@ -18,6 +18,22 @@ myenv/
 .venv/
 venv/
 
+# Secrets and local credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+kaggle.json
+credentials.json
+token.json
+secrets.json
+secret.json
+.streamlit/secrets.toml
+*.local
+*.local.*
+
 # Jupyter / notebooks
 *.ipynb_checkpoints
 
@@ -30,6 +46,12 @@ Thumbs.db
 .uv-cache/
 .tmp/
 tmp/
+cache/
+logs/
+output/
+outputs/
+artifacts/
+downloads/
 
 # Databases and local persistence
 *.db
@@ -43,11 +65,17 @@ Data_load/flight.db
 # Project data artifacts and generated files
 Data_load/raw/
 Data_load/internal/generated/
+data/raw/
+data/processed/
 models/*.pkl
 models/*.joblib
 models/*.model
 models/*.onnx
 models/training_dataset.csv
+*.parquet
+*.feather
+*.h5
+*.hdf5
 FULL_CODE_DUMP.md
 
 # IDE / Editor configuration
