@@ -43,6 +43,8 @@ secret.json
 Thumbs.db
 
 # Local runtime/cache artifacts
+.agents/
+.codex/
 .uv-cache/
 .tmp/
 tmp/
@@ -52,6 +54,9 @@ output/
 outputs/
 artifacts/
 downloads/
+backtest/backtest_results.csv
+*.tmp
+*.bak
 
 # Databases and local persistence
 *.db
@@ -63,6 +68,8 @@ downloads/
 Data_load/flight.db
 
 # Project data artifacts and generated files
+debug/
+verify_fixes.py
 Data_load/raw/
 Data_load/internal/generated/
 data/raw/
