@@ -54,12 +54,16 @@ def load_fuel_price_snapshot(
         for signal_type, value in fuel_prices.items():
             if value is None:
                 continue
+            value = float(value)
+            if not 200 <= value <= 500:
+                print(f"Skipping invalid {signal_type}={value}; expected 200-500 PKR/litre")
+                continue
 
             rows.append(
                 {
-                    "route": None,
+                    "route": "GLOBAL",
                     "signal_type": signal_type,
-                    "value": float(value),
+                    "value": value,
                     "unit": "PKR/litre",
                     "source": payload.get("source", "Unknown"),
                     "recorded_date": payload.get("scraped_date"),

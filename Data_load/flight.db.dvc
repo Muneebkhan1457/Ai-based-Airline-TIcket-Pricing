@@ -1,0 +1,5 @@
+outs:
+- md5: 2d5b732b05bf9d4aa271232cc6611e05
+  size: 929792
+  hash: md5
+  path: flight.db

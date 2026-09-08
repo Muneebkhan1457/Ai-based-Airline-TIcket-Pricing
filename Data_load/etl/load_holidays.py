@@ -70,7 +70,7 @@ def main():
 
     for holiday_date, name in HOLIDAYS_2026:
         row = (
-            None,  # holidays are a global signal, not tied to a route
+            "GLOBAL",  # holidays are a global signal, not tied to a route
             "holiday",
             1.0,  # flag value: 1 = this date is a holiday
             None,

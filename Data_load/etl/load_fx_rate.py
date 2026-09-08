@@ -43,7 +43,7 @@ def load_fx_snapshot(raw_path: Path, conn: sqlite3.Connection) -> int:
     payload = json.loads(raw_path.read_text())
 
     row = (
-        None,  # FX rate is a global signal, not tied to a route
+        "GLOBAL",  # FX rate is a global signal, not tied to a route
         "usd_to_pkr",
         float(payload["usd_to_pkr"]),
         "PKR",

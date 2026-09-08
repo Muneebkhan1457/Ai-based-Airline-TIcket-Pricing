@@ -15,20 +15,88 @@ API_BASE_URL = "http://localhost:8000"
 ROUTES = ["KHI-LHE", "KHI-ISB", "KHI-DXB", "LHE-ISB", "KHI-PEW"]
 CLASSES = ["Economy", "Business"]
 
+def get_json_response(resp):
+    try:
+        return resp.json()
+    except ValueError:
+        return None
+
+def fetch_latest_prices():
+    resp = requests.get(f"{API_BASE_URL}/pricing/history/latest", timeout=10)
+    data = get_json_response(resp)
+    if resp.status_code != 200:
+        detail = data.get("detail") if isinstance(data, dict) else resp.text[:300]
+        raise RuntimeError(detail or "Could not load latest price history.")
+    return data or []
+
+def render_latest_price_table():
+    try:
+        latest_prices = fetch_latest_prices()
+    except Exception as e:
+        st.warning(f"Could not load latest batch prices: {e}")
+        return
+
+    if not latest_prices:
+        st.info("No batch repricing history yet.")
+        return
+
+    rows = []
+    for item in latest_prices:
+        rows.append({
+            "Route": item["route"],
+            "Class": item["flight_class"],
+            "Recommended Price (PKR)": round(item["price"], 2),
+            "Expected Revenue (PKR)": round(item["expected_revenue"], 2) if item["expected_revenue"] is not None else None,
+            "Predicted Demand (%)": round(item["predicted_demand_ratio"] * 100, 2) if item["predicted_demand_ratio"] is not None else None,
+            "Updated At": item["recorded_at"],
+        })
+    st.dataframe(rows, hide_index=True, width='stretch')
+
+def fetch_signals_history():
+    resp = requests.get(f"{API_BASE_URL}/signals/history", timeout=10)
+    data = get_json_response(resp)
+    if resp.status_code != 200:
+        detail = data.get("detail") if isinstance(data, dict) else resp.text[:300]
+        raise RuntimeError(detail or "Could not load market signals history.")
+    return data or []
+
+def render_signals_history_table():
+    try:
+        signals = fetch_signals_history()
+    except Exception as e:
+        st.warning(f"Could not load market signals: {e}")
+        return
+
+    if not signals:
+        st.info("No market signals recorded yet.")
+        return
+
+    rows = []
+    for item in signals:
+        rows.append({
+            "Signal Type": item.get("signal_type"),
+            "Route": item.get("route") or "GLOBAL",
+            "Value": item.get("value"),
+            "Recorded Date": item.get("recorded_date"),
+        })
+    st.dataframe(rows, hide_index=True, width='stretch')
+
 st.set_page_config(page_title="PIA Dynamic Pricing Cockpit", layout="wide")
-st.title("PIA Dynamic Pricing -- Revenue Management Cockpit")
+st.title("PIA Dynamic Pricing (Revenue Management Cockpit)")
 
 # --- Sidebar: API health check ---
 with st.sidebar:
     st.header("System Status")
     try:
-        health = requests.get(f"{API_BASE_URL}/health", timeout=5).json()
+        health = requests.get(f"{API_BASE_URL}/health", timeout=8).json()
         if health["status"] == "ok":
             st.success("API: Connected")
         else:
             st.warning("API: Degraded")
         st.write(f"Database: {'OK' if health['database_connected'] else 'Unavailable'}")
         st.write(f"Model loaded: {'OK' if health['model_loaded'] else 'Unavailable'}")
+    except requests.exceptions.Timeout:
+        st.warning("API Timeout: Databricks is loading the model or starting the SQL Warehouse...")
     except requests.exceptions.ConnectionError:
         st.error("Cannot reach API. Is it running? (uv run uvicorn api.main:app --port 8000)")
         st.stop()
@@ -88,10 +156,22 @@ with tab1:
 
     st.divider()
     if st.button("Reprice ALL Routes (Batch)"):
+        st.info("Repricing in progress... This may take a few minutes as it re-scrapes live competitor and fuel data.")
         with st.spinner("Running full repricing cycle..."):
             try:
-                resp = requests.post(f"{API_BASE_URL}/pricing/batch-reprice", timeout=180).json()
-                st.success(resp["message"])
+                resp = requests.post(f"{API_BASE_URL}/pricing/batch-reprice", timeout=300)
+                data = get_json_response(resp)
+                if data is None:
+                    st.error(f"Batch reprice failed: API returned non-JSON response ({resp.status_code}).")
+                    st.code(resp.text[:1000] or "<empty response>")
+                    st.stop()
+
+                if resp.status_code == 200:
+                    st.success(data["message"])
+                    st.subheader("Latest Batch Recommended Prices")
+                    render_latest_price_table()
+                else:
+                    st.error(data.get("detail", "Batch reprice failed."))
             except Exception as e:
                 st.error(f"Batch reprice failed: {e}")
 
@@ -127,9 +207,6 @@ with tab2:
 # --- Tab 3: Market Signal Monitor ---
 with tab3:
     st.subheader("Market Signals & Autopilot Log")
-    st.caption(
-        "This tab would show live fuel/competitor/FX trends and the price_history log. "
-        "Since there's no dedicated API endpoint yet for querying price_history or raw signal trends, "
-        "this is a placeholder -- a future GET /signals/history and GET /pricing/history endpoint "
-        "would be needed to populate this properly instead of querying the DB directly from here."
-    )
+    st.caption("Recent market signal updates (fuel, FX, competitor prices) retrieved from Databricks system of record.")
+    render_signals_history_table()
+

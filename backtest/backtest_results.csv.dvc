@@ -1,0 +1,5 @@
+outs:
+- md5: 0f5457f5c5be31c51e6313b45697641e
+  size: 75492
+  hash: md5
+  path: backtest_results.csv

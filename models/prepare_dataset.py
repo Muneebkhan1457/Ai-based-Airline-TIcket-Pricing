@@ -153,6 +153,47 @@ def prepare_dataset():
     final_df = df[feature_columns]
     final_df.to_csv(OUTPUT_CSV, index=False)
     print(f"Dataset generated - shape {final_df.shape} -> {OUTPUT_CSV}")
+    
+    # 📊 DISPLAY METRICS
+    print("\n" + "="*60)
+    print("✅ DATASET METRICS")
+    print("="*60)
+    print(f"\nShape: {final_df.shape[0]} flights × {final_df.shape[1]} features")
+    print(f"\nFeatures:")
+    for i, col in enumerate(feature_columns, 1):
+        print(f"  {i:2d}. {col}")
+    
+    print(f"\n📈 DEMAND RATIO STATISTICS:")
+    print(final_df["demand_ratio"].describe())
+    
+    print(f"\n🎯 KEY STATISTICS:")
+    print(f"  Average occupancy: {final_df['demand_ratio'].mean():.2%}")
+    print(f"  Min occupancy: {final_df['demand_ratio'].min():.2%}")
+    print(f"  Max occupancy: {final_df['demand_ratio'].max():.2%}")
+    print(f"  Std deviation: {final_df['demand_ratio'].std():.4f}")
+    
+    print(f"\n💰 PRICE STATISTICS:")
+    print(f"  Average price: {final_df['current_price'].mean():,.0f} PKR")
+    print(f"  Min price: {final_df['current_price'].min():,.0f} PKR")
+    print(f"  Max price: {final_df['current_price'].max():,.0f} PKR")
+    
+    print(f"\n⛽ EXTERNAL SIGNALS:")
+    print(f"  Petrol (avg): {final_df['petrol_price'].mean():.2f} PKR/L")
+    print(f"  Diesel (avg): {final_df['diesel_price'].mean():.2f} PKR/L")
+    print(f"  USD/PKR (avg): {final_df['usd_to_pkr'].mean():.2f}")
+    
+    print(f"\n🎯 COMPETITOR DATA:")
+    print(f"  Routes with real competitor data: {final_df['competitor_data_is_real'].sum()} flights")
+    print(f"  Avg competitor price: {final_df['competitor_avg_price'].mean():,.0f} PKR")
+    
+    print(f"\n📅 TEMPORAL FEATURES:")
+    print(f"  Weekend flights: {final_df['is_weekend'].sum()} ({final_df['is_weekend'].mean():.1%})")
+    print(f"  Holiday window flights: {final_df['is_holiday_window'].sum()} ({final_df['is_holiday_window'].mean():.1%})")
+    
+    print("\n" + "="*60)
+    print("✅✅✅ FEATURE ENGINEERING COMPLETE ✅✅✅")
+    print("="*60 + "\n")
+    
     return final_df
 
 

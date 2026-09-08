@@ -8,8 +8,6 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from apscheduler.schedulers.blocking import BlockingScheduler
-
 from scheduler.jobs import run_fuel_job, run_competitor_job, run_fx_job, init_db
 from scheduler.delta_check import check_for_changes
 from pricing_engine.optimizer import optimize_price
@@ -62,7 +60,7 @@ def build_context_for_route(conn, route: str, flight_class: str) -> dict | None:
     def get_signal(signal_type, route_filter=None):
         row = conn.execute(
             "SELECT value FROM external_signals WHERE signal_type = ? AND "
-            "(route = ? OR route IS NULL) ORDER BY recorded_date DESC LIMIT 1",
+            "(route = ? OR route = 'GLOBAL' OR route IS NULL) ORDER BY recorded_date DESC LIMIT 1",
             (signal_type, route_filter)
         ).fetchone()
         return row[0] if row else None
@@ -151,6 +149,8 @@ def scheduled_check():
         reprice_route(route)
 
 def main():
+    from apscheduler.schedulers.blocking import BlockingScheduler
+
     init_db()
     scheduler = BlockingScheduler()
     scheduler.add_job(scheduled_check, "interval", minutes=CHECK_INTERVAL_MINUTES, next_run_time=datetime.now())

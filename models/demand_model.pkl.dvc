@@ -1,0 +1,5 @@
+outs:
+- md5: 14428ddc08b59e6631c4a0f63ed99c1b
+  size: 266170
+  hash: md5
+  path: demand_model.pkl

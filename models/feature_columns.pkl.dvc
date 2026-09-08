@@ -1,0 +1,5 @@
+outs:
+- md5: 2f4777bacdbc1ca9c3af74f42bf1148a
+  size: 395
+  hash: md5
+  path: feature_columns.pkl

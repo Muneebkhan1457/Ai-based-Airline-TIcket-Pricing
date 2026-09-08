@@ -30,6 +30,15 @@ class DemandAtPriceResponse(BaseModel):
     price: float
     predicted_demand_ratio: float
 
+class PriceHistoryItem(BaseModel):
+    route: str
+    flight_class: str
+    price: float
+    expected_revenue: Optional[float]
+    predicted_demand_ratio: Optional[float]
+    trigger_reason: Optional[str]
+    recorded_at: str
+
 class HealthResponse(BaseModel):
     status: str
     database_connected: bool
