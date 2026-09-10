@@ -87,12 +87,12 @@ def _build_feature_row(context: dict) -> pd.DataFrame:
     row_encoded = row_encoded.reindex(columns=EXPECTED_COLS, fill_value=0)
 
     int_cols = ["days_to_departure", "day_of_week"]
-    long_cols = ["time_of_day", "is_weekend", "is_holiday_window", "competitor_data_is_real"]
+    long_cols = ["time_of_day", "is_weekend", "is_holiday_window"]
     float_cols = ["current_price", "base_fare", "petrol_price", "diesel_price",
                   "usd_to_pkr", "competitor_min_price", "competitor_avg_price",
                   "price_vs_competitor_ratio"]
     bool_cols = [c for c in row_encoded.columns
-                 if c.startswith("route_") or c.startswith("flight_class_")]
+                 if c.startswith("route_") or c.startswith("flight_class_")] + ["competitor_data_is_real"]
 
     for col in int_cols:
         if col in row_encoded.columns:

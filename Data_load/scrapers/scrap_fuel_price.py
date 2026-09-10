@@ -12,7 +12,6 @@ Output: raw/fuel_price_YYYY-MM-DD.json
 """
 
 import json
-import re
 from datetime import date
 from pathlib import Path
 
@@ -20,7 +19,8 @@ import requests
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE_URL = "https://ograprices.com/today-petrol-price/"
+PETROL_URL = "https://ograprices.com/today-petrol-price/"
+DIESEL_URL = "https://ograprices.com/today-diesel-price/"
 RAW_DIR = ROOT / "raw"
 MIN_REASONABLE_FUEL_PRICE = 200
 MAX_REASONABLE_FUEL_PRICE = 500
@@ -39,41 +39,37 @@ def fetch_page(url: str) -> str:
     return response.text
 
 
-def extract_prices(html: str) -> dict:
+def extract_price_from_html(html: str, fuel_type: str) -> float:
     """
-    Pulls petrol and HSD (diesel) prices out of the Current Fuel Rates section.
-    The page also contains nearby change indicators such as "Down Rs 0.75";
-    those must not be treated as fuel prices.
+    Pulls price out of the fpp-solo-price widget for a specific fuel type.
     """
     soup = BeautifulSoup(html, "html.parser")
-    text = soup.get_text(separator=" ", strip=True)
 
-    current_rates_match = re.search(
-        r"Current Fuel Rates(?P<section>.*?)(?:Regulatory Insight|Latest OGRA|Fuel Price Trends)",
-        text,
-        flags=re.IGNORECASE,
-    )
-    search_text = current_rates_match.group("section") if current_rates_match else text
+    for name_tag in soup.find_all("h3", class_="fpp-solo-name"):
+        name_text = name_tag.get_text(strip=True).lower()
+        if fuel_type in name_text:
+            price_div = name_tag.find_next_sibling("div", class_="fpp-solo-price")
+            if price_div:
+                counter = price_div.find("span", class_="fpp-counter")
+                if counter and counter.has_attr("data-target"):
+                    return float(counter["data-target"])
+    return None
 
-    petrol_match = re.search(
-        r"\bPetrol\b\s+PKR\s+(\d{2,3}(?:\.\d{1,2})?)\s*/?\s*Litre",
-        search_text,
-        flags=re.IGNORECASE,
-    )
-    diesel_match = re.search(
-        r"\b(?:High Speed Diesel|HSD)\b\s+PKR\s+(\d{2,3}(?:\.\d{1,2})?)\s*/?\s*Litre",
-        search_text,
-        flags=re.IGNORECASE,
-    )
 
-    if not petrol_match or not diesel_match:
+def extract_prices() -> dict:
+    petrol_html = fetch_page(PETROL_URL)
+    diesel_html = fetch_page(DIESEL_URL)
+
+    petrol_price = extract_price_from_html(petrol_html, "petrol")
+    diesel_price = extract_price_from_html(diesel_html, "diesel")
+    if diesel_price is None:
+        diesel_price = extract_price_from_html(diesel_html, "hsd")
+
+    if petrol_price is None or diesel_price is None:
         raise ValueError(
-            "Could not find petrol/diesel prices in the Current Fuel Rates section. "
+            f"Could not find petrol/diesel prices (Petrol: {petrol_price}, Diesel: {diesel_price}). "
             "The site structure may have changed -- inspect the HTML manually."
         )
-
-    petrol_price = float(petrol_match.group(1))
-    diesel_price = float(diesel_match.group(1))
 
     for label, value in {
         "petrol_price_pkr_per_litre": petrol_price,
@@ -98,7 +94,7 @@ def save_snapshot(data: dict) -> Path:
 
     payload = {
         "scraped_date": today,
-        "source": SOURCE_URL,
+        "source": f"{PETROL_URL} / {DIESEL_URL}",
         **data,
     }
 
@@ -107,8 +103,7 @@ def save_snapshot(data: dict) -> Path:
 
 
 def main():
-    html = fetch_page(SOURCE_URL)
-    prices = extract_prices(html)
+    prices = extract_prices()
     out_path = save_snapshot(prices)
     print(f"Saved fuel price snapshot: {out_path}")
     print(prices)
