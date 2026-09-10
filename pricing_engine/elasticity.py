@@ -3,22 +3,40 @@ Wraps the saved demand model so the rest of the pricing engine can ask:
 "if I set this price for this flight, what demand do I expect?"
 """
 from pathlib import Path
+import os
 import joblib
 import pandas as pd
+import mlflow
+import mlflow.pyfunc
+from mlflow.tracking import MlflowClient
+from dotenv import load_dotenv
+
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = ROOT / "models" / "demand_model.pkl"
 FEATURE_COLUMNS_PATH = ROOT / "models" / "feature_columns.pkl"
 
 _model = None
 _feature_columns = None
 
+def _get_latest_model_version() -> int:
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+    client = MlflowClient()
+    try:
+        versions = client.search_model_versions("name='pia-demand-model'")
+        if versions:
+            return max(int(v.version) for v in versions)
+        return 1
+    except Exception:
+        return 1
+
 def _load_model():
     global _model, _feature_columns
     if _model is None:
-        if not MODEL_PATH.exists():
-            raise FileNotFoundError(f"{MODEL_PATH} not found. Train and save the demand model first.")
-        _model = joblib.load(MODEL_PATH)
+        mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+        version = _get_latest_model_version()
+        model_uri = f"models:/pia-demand-model/{version}"
+        _model = mlflow.pyfunc.load_model(model_uri)
         _feature_columns = joblib.load(FEATURE_COLUMNS_PATH)
     return _model, _feature_columns
 
@@ -28,6 +46,11 @@ def predict_demand(context: dict) -> float:
     row_encoded = pd.get_dummies(row, columns=["route", "flight_class"])
     row_encoded = row_encoded.reindex(columns=feature_columns, fill_value=0)
     row_encoded = row_encoded.apply(pd.to_numeric, errors='coerce')
+    
+    bool_cols = [c for c in row_encoded.columns if c.startswith("route_") or c.startswith("flight_class_")]
+    for col in bool_cols:
+        row_encoded[col] = row_encoded[col].astype(bool)
+        
     prediction = model.predict(row_encoded)[0]
     return float(min(max(prediction, 0.0), 1.0))
 

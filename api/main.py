@@ -55,10 +55,12 @@ def signals_history(limit: int = 20):
 
 @app.post("/signals/trigger-etl", response_model=ETLTriggerResponse)
 def trigger_etl():
-    from scheduler.databricks_autopilot import run_etl_and_push
+    from scheduler.jobs import run_fuel_job, run_competitor_job, run_fx_job
     try:
-        pushed = run_etl_and_push()
-        return {"status": "ok", "message": f"All scrapers and ETL jobs completed. Signals pushed to Databricks: {pushed}."}
+        run_fuel_job()
+        run_competitor_job()
+        run_fx_job()
+        return {"status": "ok", "message": "All scrapers and ETL jobs completed locally."}
     except Exception as e:
         return {"status": "partial_failure", "message": str(e)}
 

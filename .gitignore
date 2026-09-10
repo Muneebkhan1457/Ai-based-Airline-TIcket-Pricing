@@ -93,3 +93,4 @@ FULL_CODE_DUMP.md
 *.njsproj
 *.sln
 *.swp
+mlruns/

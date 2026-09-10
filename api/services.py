@@ -4,45 +4,33 @@ from datetime import datetime
 
 import pandas as pd
 import numpy as np
+import sqlite3
+from pathlib import Path
+
+import pandas as pd
+import numpy as np
 import mlflow
 import mlflow.pyfunc
-import databricks.sql
+from mlflow.tracking import MlflowClient
 from dotenv import load_dotenv
-from databricks.sdk import WorkspaceClient
 
 load_dotenv()
 
 # ============================================
-# DATABRICKS + MLFLOW CONNECTION
+# MLFLOW CONNECTION (DagsHub)
 # ============================================
-
-host = os.getenv("DATABRICKS_HOST")
-token = os.getenv("DATABRICKS_TOKEN")
-warehouse = os.getenv("DATABRICKS_WAREHOUSE")
-
-mlflow.set_tracking_uri("databricks")
-mlflow.set_registry_uri("databricks-uc")
+# Tracking URI is automatically picked up from os.environ["MLFLOW_TRACKING_URI"] if set,
+# or we can rely on standard DagsHub configuration.
 
 # Lazy connection — created on first use so pytest imports don't block
 _connection = None
-_workspace_client = None
 
 def _get_connection():
     global _connection
     if _connection is None:
-        # databricks-sql-connector v4+ uses access_token= directly (not auth_type="pat")
-        _connection = databricks.sql.connect(
-            server_hostname=host,
-            http_path="/sql/1.0/warehouses/" + warehouse,
-            access_token=token,
-        )
+        db_path = Path(__file__).resolve().parents[1] / "Data_load" / "flight.db"
+        _connection = sqlite3.connect(db_path, check_same_thread=False)
     return _connection
-
-def _get_workspace_client():
-    global _workspace_client
-    if _workspace_client is None:
-        _workspace_client = WorkspaceClient(host=host, token=token)
-    return _workspace_client
 
 MODEL_NAME = "airline_daw.default.pia-demand-model"
 
@@ -62,19 +50,30 @@ CLASSES = ["Economy", "Business"]
 # MODEL LOADING (latest version)
 # ============================================
 
+from mlflow.tracking import MlflowClient
+import mlflow
+import os
+
 @lru_cache(maxsize=1)
 def _get_latest_model_version() -> int:
-    versions = list(_get_workspace_client().model_versions.list(MODEL_NAME))
-    version_numbers = [v.version for v in versions if str(v.status.value) == "READY"]
-    return max(version_numbers) if version_numbers else 1
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
+    client = MlflowClient()
+    try:
+        versions = client.search_model_versions(f"name='pia-demand-model'")
+        if versions:
+            return max(int(v.version) for v in versions)
+        return 1
+    except Exception:
+        return 1
 
 @lru_cache(maxsize=1)
 def get_model():
     """Load the latest registered model from the MLflow registry (cached)."""
+    mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
     version = _get_latest_model_version()
-    model_uri = f"models:/{MODEL_NAME}/{version}"
+    model_uri = f"models:/pia-demand-model/{version}"
     model = mlflow.pyfunc.load_model(model_uri)
-    print(f"Loaded {MODEL_NAME} v{version}")
+    print(f"Loaded pia-demand-model v{version} from DagsHub")
     return model
 
 # ============================================
@@ -213,7 +212,7 @@ def optimize_price(context: dict, total_seats: int, remaining_seats: int) -> dic
 def get_base_fare(route: str, flight_class: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT AVG(current_price) FROM airline_daw.pia_pricing.flights
+        """SELECT AVG(current_price) FROM flights
            WHERE route = ? AND flight_class = ?""",
         (route, flight_class),
     )
@@ -225,7 +224,7 @@ def get_base_fare(route: str, flight_class: str):
 def get_competitor_stats(route: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT value FROM airline_daw.pia_pricing.external_signals
+        """SELECT value FROM external_signals
            WHERE route = ? AND signal_type LIKE '%competitor%'""",
         (route,),
     )
@@ -240,7 +239,7 @@ def get_competitor_stats(route: str):
 def get_signal(signal_type: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT value FROM airline_daw.pia_pricing.external_signals
+        """SELECT value FROM external_signals
            WHERE signal_type = ?
            ORDER BY recorded_date DESC LIMIT 1""",
         (signal_type,),
@@ -253,7 +252,7 @@ def get_signal(signal_type: str):
 def get_holidays():
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT recorded_date FROM airline_daw.pia_pricing.external_signals
+        """SELECT recorded_date FROM external_signals
            WHERE signal_type = 'holiday'"""
     )
     rows = cursor.fetchall()
@@ -305,10 +304,10 @@ def _build_context(route: str, flight_class: str, days_to_departure: int,
 def ensure_schema():
     cursor = _get_connection().cursor()
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS airline_daw.pia_pricing.price_history (
+        CREATE TABLE IF NOT EXISTS price_history (
             route STRING,
             flight_class STRING,
-            recommended_price DOUBLE,
+            price DOUBLE,
             expected_revenue DOUBLE,
             predicted_demand_ratio DOUBLE,
             trigger_reason STRING,
@@ -350,8 +349,8 @@ def insert_price_history(rows: list) -> None:
     cursor = _get_connection().cursor()
     for row in rows:
         cursor.execute(
-            """INSERT INTO airline_daw.pia_pricing.price_history
-               (route, flight_class, recommended_price, expected_revenue,
+            """INSERT INTO price_history
+               (route, flight_class, price, expected_revenue,
                 predicted_demand_ratio, trigger_reason, recorded_at)
                VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (
@@ -370,7 +369,7 @@ def get_representative_flight(route: str, flight_class: str) -> dict | None:
     cursor = _get_connection().cursor()
     cursor.execute(
         """SELECT days_to_departure, total_seats, remaining_seats, current_price
-           FROM airline_daw.pia_pricing.flights
+           FROM flights
            WHERE route = ? AND flight_class = ?
            ORDER BY days_to_departure ASC LIMIT 1""",
         (route, flight_class),
@@ -453,7 +452,7 @@ def get_signals_history(limit: int = 20) -> list:
     cursor = _get_connection().cursor()
     cursor.execute(
         """SELECT signal_type, route, value, recorded_date
-           FROM airline_daw.pia_pricing.external_signals
+           FROM external_signals
            ORDER BY recorded_date DESC LIMIT ?""",
         (limit,),
     )
@@ -468,9 +467,9 @@ def get_signals_history(limit: int = 20) -> list:
 def get_latest_price_history(limit: int = 10) -> list:
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT route, flight_class, recommended_price, expected_revenue,
+        """SELECT route, flight_class, price, expected_revenue,
                   predicted_demand_ratio, trigger_reason, recorded_at
-           FROM airline_daw.pia_pricing.price_history
+           FROM price_history
            ORDER BY recorded_at DESC LIMIT ?""",
         (limit,),
     )

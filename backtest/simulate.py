@@ -102,6 +102,11 @@ def optimize_price_vectorized(context: dict, total_seats: int, remaining_seats: 
     rows_encoded = pd.get_dummies(rows, columns=["route", "flight_class"])
     rows_encoded = rows_encoded.reindex(columns=feature_columns, fill_value=0)
     rows_encoded = rows_encoded.apply(pd.to_numeric, errors="coerce")
+    
+    bool_cols = [c for c in rows_encoded.columns if c.startswith("route_") or c.startswith("flight_class_")]
+    for col in bool_cols:
+        rows_encoded[col] = rows_encoded[col].astype(bool)
+        
     predicted_demands = model.predict(rows_encoded).clip(0.0, 1.0)
 
     revenues = [

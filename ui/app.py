@@ -96,7 +96,7 @@ with st.sidebar:
         st.write(f"Database: {'OK' if health['database_connected'] else 'Unavailable'}")
         st.write(f"Model loaded: {'OK' if health['model_loaded'] else 'Unavailable'}")
     except requests.exceptions.Timeout:
-        st.warning("API Timeout: Databricks is loading the model or starting the SQL Warehouse...")
+        st.warning("API Timeout: The local API is busy or loading the MLflow model...")
     except requests.exceptions.ConnectionError:
         st.error("Cannot reach API. Is it running? (uv run uvicorn api.main:app --port 8000)")
         st.stop()
@@ -207,6 +207,6 @@ with tab2:
 # --- Tab 3: Market Signal Monitor ---
 with tab3:
     st.subheader("Market Signals & Autopilot Log")
-    st.caption("Recent market signal updates (fuel, FX, competitor prices) retrieved from Databricks system of record.")
+    st.caption("Recent market signal updates (fuel, FX, competitor prices) retrieved from local SQLite database.")
     render_signals_history_table()
 

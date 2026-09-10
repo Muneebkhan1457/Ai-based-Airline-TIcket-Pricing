@@ -15,7 +15,7 @@ _mock_model = MagicMock()
 
 # Patch lazy getters and model loader at import time
 with patch("api.services._get_connection", return_value=_mock_connection), \
-     patch("api.services._get_workspace_client", return_value=_mock_ws_client), \
+     patch("api.services._get_latest_model_version", return_value=1), \
      patch("api.services.get_model", return_value=_mock_model):
     from fastapi.testclient import TestClient
     from api.main import app
