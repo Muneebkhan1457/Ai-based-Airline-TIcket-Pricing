@@ -36,7 +36,21 @@ def _load_model():
         mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
         version = _get_latest_model_version()
         model_uri = f"models:/pia-demand-model/{version}"
-        _model = mlflow.pyfunc.load_model(model_uri)
+        try:
+            _model = mlflow.pyfunc.load_model(model_uri)
+            print(f"[elasticity] Loaded pia-demand-model v{version} from DagsHub registry")
+        except Exception as registry_err:
+            print(f"[elasticity] Registry load failed ({registry_err}); falling back to local pkl")
+            import pickle
+            pkl_path = ROOT / "models" / "demand_model.pkl"
+            with open(pkl_path, "rb") as f:
+                raw_model = pickle.load(f)
+            # Minimal wrapper so callers get a .predict() interface
+            class _LocalModelWrapper:
+                def __init__(self, m): self._m = m
+                def predict(self, data): return self._m.predict(data)
+            _model = _LocalModelWrapper(raw_model)
+            print(f"[elasticity] Loaded model from local pkl: {pkl_path}")
         _feature_columns = joblib.load(FEATURE_COLUMNS_PATH)
     return _model, _feature_columns
 

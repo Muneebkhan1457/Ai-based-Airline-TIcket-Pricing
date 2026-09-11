@@ -68,13 +68,26 @@ def _get_latest_model_version() -> int:
 
 @lru_cache(maxsize=1)
 def get_model():
-    """Load the latest registered model from the MLflow registry (cached)."""
+    """Load model: tries MLflow registry first, falls back to local demand_model.pkl."""
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
     version = _get_latest_model_version()
     model_uri = f"models:/pia-demand-model/{version}"
-    model = mlflow.pyfunc.load_model(model_uri)
-    print(f"Loaded pia-demand-model v{version} from DagsHub")
-    return model
+    try:
+        model = mlflow.pyfunc.load_model(model_uri)
+        print(f"Loaded pia-demand-model v{version} from DagsHub registry")
+        return model
+    except Exception as registry_err:
+        print(f"Registry load failed ({registry_err}); falling back to local pkl")
+        import pickle
+        pkl_path = Path(__file__).resolve().parents[1] / "models" / "demand_model.pkl"
+        with open(pkl_path, "rb") as f:
+            raw_model = pickle.load(f)
+        # Wrap in a lightweight pyfunc-compatible wrapper so callers can use .predict()
+        class _LocalModelWrapper:
+            def __init__(self, m): self._m = m
+            def predict(self, data): return self._m.predict(data)
+        print(f"Loaded model from local pkl: {pkl_path}")
+        return _LocalModelWrapper(raw_model)
 
 # ============================================
 # ELASTICITY LAYER (same logic as notebook Phase 6)
@@ -344,7 +357,7 @@ def get_price_recommendation(route, flight_class, days_to_departure,
 
 
 def insert_price_history(rows: list) -> None:
-    """Insert reprice records into the Databricks price_history table."""
+    """Insert reprice records into the local SQLite price_history table."""
     ensure_schema()
     cursor = _get_connection().cursor()
     for row in rows:
@@ -365,7 +378,7 @@ def insert_price_history(rows: list) -> None:
 
 
 def get_representative_flight(route: str, flight_class: str) -> dict | None:
-    """Fetch one representative flight for a route+class from Databricks."""
+    """Fetch one representative flight for a route+class from local SQLite."""
     cursor = _get_connection().cursor()
     cursor.execute(
         """SELECT days_to_departure, total_seats, remaining_seats, current_price
