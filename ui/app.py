@@ -7,10 +7,11 @@ Run the API first in a separate terminal:
 Then run this dashboard:
     uv run streamlit run ui/app.py
 """
+import os
 import requests
 import streamlit as st
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
 ROUTES = ["KHI-LHE", "KHI-ISB", "KHI-DXB", "LHE-ISB", "KHI-PEW"]
 CLASSES = ["Economy", "Business"]

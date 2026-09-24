@@ -185,8 +185,27 @@ def main():
     # Assign 'champion' alias to the registered model
     client = MlflowClient()
     client.set_registered_model_alias("pia-demand-model", "champion", mv.version)
-    
-    print("Model registered successfully as 'pia-demand-model' with alias 'champion'.")
+
+    # Add description so MLflow/DagsHub UI shows the winning model name + metrics
+    best_rmse = next(r["RMSE"] for r in results if r["Model"] == best_model_name)
+    client.update_model_version(
+        name="pia-demand-model",
+        version=mv.version,
+        description=(
+            f"Winning model: {best_model_name} | "
+            f"R²={best_r2:.4f} | RMSE={best_rmse:.4f} | Monotonic=True | "
+            f"Source run: {best_run_id[:8]}"
+        ),
+    )
+
+    # Add tags for quick filtering in the registry
+    client.set_model_version_tag("pia-demand-model", mv.version, "model_type", best_model_name)
+    client.set_model_version_tag("pia-demand-model", mv.version, "r2",   str(round(best_r2,   4)))
+    client.set_model_version_tag("pia-demand-model", mv.version, "rmse", str(round(best_rmse, 4)))
+    client.set_model_version_tag("pia-demand-model", mv.version, "monotonic", "True")
+
+    print(f"Model registered successfully as 'pia-demand-model' v{mv.version} with alias 'champion'.")
+    print(f"  Description: {best_model_name} | R²={best_r2:.4f} | RMSE={best_rmse:.4f}")
     
     # Save column features locally
     with open(COLS_PATH, "wb") as f:

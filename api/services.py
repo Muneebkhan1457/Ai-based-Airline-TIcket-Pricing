@@ -5,6 +5,12 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 import sqlite3
+try:
+    import psycopg2
+    import psycopg2.extras
+    _PSYCOPG2_AVAILABLE = True
+except ImportError:
+    _PSYCOPG2_AVAILABLE = False
 from pathlib import Path
 
 import pandas as pd
@@ -24,13 +30,34 @@ load_dotenv()
 
 # Lazy connection — created on first use so pytest imports don't block
 _connection = None
+_using_postgres = False
 
 def _get_connection():
-    global _connection
+    """Return a DB connection.
+    - If DATABASE_URL env var is set and psycopg2 is available → PostgreSQL (AWS RDS)
+    - Otherwise → local SQLite fallback (for offline development & testing)
+    """
+    global _connection, _using_postgres
     if _connection is None:
-        db_path = Path(__file__).resolve().parents[1] / "Data_load" / "flight.db"
-        _connection = sqlite3.connect(db_path, check_same_thread=False)
+        db_url = os.getenv("DATABASE_URL")
+        if db_url and _PSYCOPG2_AVAILABLE:
+            dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
+            _connection = psycopg2.connect(dsn)
+            _connection.autocommit = False
+            _using_postgres = True
+            print("[DB] Connected to PostgreSQL (AWS RDS)")
+        else:
+            db_path = Path(__file__).resolve().parents[1] / "Data_load" / "flight.db"
+            _connection = sqlite3.connect(str(db_path), check_same_thread=False)
+            _using_postgres = False
+            print("[DB] Connected to local SQLite")
     return _connection
+
+def _ph():
+    """Return the correct SQL parameter placeholder for the active DB engine.
+    PostgreSQL uses %s, SQLite uses ?
+    """
+    return "%s" if _using_postgres else "?"
 
 MODEL_NAME = "airline_daw.default.pia-demand-model"
 
@@ -225,8 +252,8 @@ def optimize_price(context: dict, total_seats: int, remaining_seats: int) -> dic
 def get_base_fare(route: str, flight_class: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT AVG(current_price) FROM flights
-           WHERE route = ? AND flight_class = ?""",
+        f"""SELECT AVG(current_price) FROM flights
+           WHERE route = {_ph()} AND flight_class = {_ph()}""",
         (route, flight_class),
     )
     result = cursor.fetchone()
@@ -237,8 +264,8 @@ def get_base_fare(route: str, flight_class: str):
 def get_competitor_stats(route: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT value FROM external_signals
-           WHERE route = ? AND signal_type LIKE '%competitor%'""",
+        f"""SELECT value FROM external_signals
+           WHERE route = {_ph()} AND signal_type LIKE '%competitor%'""",
         (route,),
     )
     rows = cursor.fetchall()
@@ -252,8 +279,8 @@ def get_competitor_stats(route: str):
 def get_signal(signal_type: str):
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT value FROM external_signals
-           WHERE signal_type = ?
+        f"""SELECT value FROM external_signals
+           WHERE signal_type = {_ph()}
            ORDER BY recorded_date DESC LIMIT 1""",
         (signal_type,),
     )
@@ -315,18 +342,36 @@ def _build_context(route: str, flight_class: str, days_to_departure: int,
 # ============================================
 
 def ensure_schema():
+    """Idempotent: create price_history table if it doesn't exist.
+    Uses correct column types for the active DB engine.
+    """
+    _get_connection()  # ensure _using_postgres is set
     cursor = _get_connection().cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS price_history (
-            route STRING,
-            flight_class STRING,
-            price DOUBLE,
-            expected_revenue DOUBLE,
-            predicted_demand_ratio DOUBLE,
-            trigger_reason STRING,
-            recorded_at STRING
-        )
-    """)
+    if _using_postgres:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_history (
+                id                     SERIAL PRIMARY KEY,
+                route                  TEXT NOT NULL,
+                flight_class           TEXT NOT NULL,
+                price                  REAL NOT NULL,
+                expected_revenue       REAL,
+                predicted_demand_ratio REAL,
+                trigger_reason         TEXT,
+                recorded_at            TEXT NOT NULL
+            )
+        """)
+    else:
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS price_history (
+                route STRING,
+                flight_class STRING,
+                price DOUBLE,
+                expected_revenue DOUBLE,
+                predicted_demand_ratio DOUBLE,
+                trigger_reason STRING,
+                recorded_at STRING
+            )
+        """)
     cursor.close()
     _get_connection().commit()
 
@@ -360,12 +405,13 @@ def insert_price_history(rows: list) -> None:
     """Insert reprice records into the local SQLite price_history table."""
     ensure_schema()
     cursor = _get_connection().cursor()
+    ph = _ph()
     for row in rows:
         cursor.execute(
-            """INSERT INTO price_history
+            f"""INSERT INTO price_history
                (route, flight_class, price, expected_revenue,
                 predicted_demand_ratio, trigger_reason, recorded_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+               VALUES ({ph}, {ph}, {ph}, {ph}, {ph}, {ph}, {ph})""",
             (
                 row["route"], row["flight_class"], row["recommended_price"],
                 row["expected_revenue"], row["predicted_demand_ratio"],
@@ -381,9 +427,9 @@ def get_representative_flight(route: str, flight_class: str) -> dict | None:
     """Fetch one representative flight for a route+class from local SQLite."""
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT days_to_departure, total_seats, remaining_seats, current_price
+        f"""SELECT days_to_departure, total_seats, remaining_seats, current_price
            FROM flights
-           WHERE route = ? AND flight_class = ?
+           WHERE route = {_ph()} AND flight_class = {_ph()}
            ORDER BY days_to_departure ASC LIMIT 1""",
         (route, flight_class),
     )
@@ -464,9 +510,9 @@ def get_demand_at_price(route, flight_class, days_to_departure, price) -> dict:
 def get_signals_history(limit: int = 20) -> list:
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT signal_type, route, value, recorded_date
+        f"""SELECT signal_type, route, value, recorded_date
            FROM external_signals
-           ORDER BY recorded_date DESC LIMIT ?""",
+           ORDER BY recorded_date DESC LIMIT {_ph()}""",
         (limit,),
     )
     rows = cursor.fetchall()
@@ -480,10 +526,10 @@ def get_signals_history(limit: int = 20) -> list:
 def get_latest_price_history(limit: int = 10) -> list:
     cursor = _get_connection().cursor()
     cursor.execute(
-        """SELECT route, flight_class, price, expected_revenue,
+        f"""SELECT route, flight_class, price, expected_revenue,
                   predicted_demand_ratio, trigger_reason, recorded_at
            FROM price_history
-           ORDER BY recorded_at DESC LIMIT ?""",
+           ORDER BY recorded_at DESC LIMIT {_ph()}""",
         (limit,),
     )
     rows = cursor.fetchall()

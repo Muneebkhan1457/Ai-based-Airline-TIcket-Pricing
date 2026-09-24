@@ -20,6 +20,7 @@ dependencies = [
     "playwright==1.61.0",
     "starlette<0.39.0",
     "lightgbm>=4.7.0",
+    "psycopg2-binary>=2.9.13",
 ]
 
 [tool.uv]

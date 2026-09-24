@@ -1,0 +1,22 @@
+# Base image
+FROM python:3.11-slim-bullseye
+
+# Working directory set kar rahe hain
+WORKDIR /app
+
+# requirements.txt copy karke dependencies install karo
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# LightGBM requires libgomp1 on Debian slim images
+RUN apt-get update && apt-get install -y libgomp1 && rm -rf /var/lib/apt/lists/*
+RUN pip install beautifulsoup4
+
+# Baqi saara project code copy karo
+COPY . .
+
+# Port 8000 expose karo API ke liye
+EXPOSE 8000
+
+# API ko start karne ki command
+CMD ["python", "-m", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

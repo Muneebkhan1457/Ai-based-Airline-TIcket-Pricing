@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ticket_pricing_api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Data_load:/app/Data_load  # Database ke liye local folder mount kar rahe hain
+    env_file:
+      - .env
+
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: ticket_pricing_ui
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    volumes:
+      - .:/app
+    environment:
+      # UI ko batana hai ke API Docker network ke andar kahan hai
+      - API_URL=http://api:8000
+    env_file:
+      - .env
