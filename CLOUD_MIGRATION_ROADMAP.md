@@ -27,22 +27,22 @@ This document serves as the master roadmap to migrate the Local Dynamic Ticket P
 ## Phase 2: Database Migration (AWS RDS) 🗄️
 *Goal: Move from local SQLite to a robust, cloud-hosted PostgreSQL database.*
 
-- [ ] **Step 1:** Create an AWS Account (if not already done).
-- [ ] **Step 2:** Provision an Amazon RDS PostgreSQL database instance.
-- [ ] **Step 3:** Configure AWS Security Groups to allow your local IP to connect to the database.
-- [ ] **Step 4:** Update `api/services.py` and `scheduler/jobs.py` to use `psycopg2` and connect to the Postgres connection string instead of SQLite.
-- [ ] **Step 5:** Write a temporary python script to migrate the existing data from your local `flight.db` to the new AWS RDS database.
+- [x] **Step 1:** Create an AWS Account (if not already done).
+- [x] **Step 2:** Provision an Amazon RDS PostgreSQL database instance.
+- [x] **Step 3:** Configure AWS Security Groups to allow your local IP to connect to the database.
+- [x] **Step 4:** Update `api/services.py` and `scheduler/jobs.py` to use `psycopg2` and connect to the Postgres connection string instead of SQLite.
+- [x] **Step 5:** Write a temporary python script to migrate the existing data from your local `flight.db` to the new AWS RDS database.
 
 ---
 
 ## Phase 3: Cloud Server Setup (AWS EC2) ☁️
 *Goal: Set up the always-on cloud server that will host your code.*
 
-- [ ] **Step 1:** Launch an Amazon EC2 instance (Ubuntu Server, t2.micro or t3.small).
-- [ ] **Step 2:** Configure Security Groups to open Port 8000 (API), Port 8501 (Streamlit), and Port 22 (SSH).
-- [ ] **Step 3:** SSH into the EC2 instance from your local terminal.
-- [ ] **Step 4:** Install Docker and Docker Compose on the EC2 instance.
-- [ ] **Step 5:** Test a manual deployment by pulling your code via Git and running `docker-compose up`.
+- [x] **Step 1:** Launch an Amazon EC2 instance (Ubuntu Server, t2.micro or t3.small).
+- [x] **Step 2:** Configure Security Groups to open Port 8000 (API), Port 8501 (Streamlit), and Port 22 (SSH).
+- [x] **Step 3:** SSH into the EC2 instance from your local terminal.
+- [x] **Step 4:** Install Docker and Docker Compose on the EC2 instance.
+- [x] **Step 5:** Test a manual deployment by pulling your code via Git and running `docker-compose up`.
 
 ---
 

@@ -10,3 +10,4 @@ joblib
 mlflow
 python-dotenv
 apscheduler
+psycopg2-binary
