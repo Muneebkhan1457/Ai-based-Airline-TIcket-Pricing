@@ -265,8 +265,8 @@ def get_competitor_stats(route: str):
     cursor = _get_connection().cursor()
     cursor.execute(
         f"""SELECT value FROM external_signals
-           WHERE route = {_ph()} AND signal_type LIKE '%competitor%'""",
-        (route,),
+           WHERE route = {_ph()} AND signal_type LIKE {_ph()}""",
+        (route, "%competitor%"),
     )
     rows = cursor.fetchall()
     cursor.close()
