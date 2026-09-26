@@ -1,7 +1,13 @@
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Optional
+
+try:
+    from db import get_connection, insert_signals
+except ImportError:
+    from Data_load.etl.db import get_connection, insert_signals
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB_PATH = ROOT / "flight.db"
@@ -32,17 +38,14 @@ def load_fuel_price_snapshot(
 ) -> list[dict]:
     raw_path = Path(raw_path)
 
-    if db_path is None:
-        db_path = DEFAULT_DB_PATH
-    db_path = Path(db_path)
-
     with raw_path.open("r", encoding="utf-8") as f:
         payload = json.load(f)
 
-    conn = sqlite3.connect(db_path)
+    conn, is_postgres = get_connection(db_path=db_path)
 
     try:
-        ensure_schema(conn)
+        if not is_postgres:
+            ensure_schema(conn)
 
         rows = []
 
@@ -71,39 +74,9 @@ def load_fuel_price_snapshot(
                 }
             )
 
-        inserted = 0
-
-        for row in rows:
-            cursor = conn.execute(
-                """
-                INSERT OR IGNORE INTO external_signals (
-                    route,
-                    signal_type,
-                    value,
-                    unit,
-                    source,
-                    recorded_date,
-                    scraped_at
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    row["route"],
-                    row["signal_type"],
-                    row["value"],
-                    row["unit"],
-                    row["source"],
-                    row["recorded_date"],
-                    row["scraped_at"],
-                ),
-            )
-
-            if cursor.rowcount == 1:
-                inserted += 1
-
-        conn.commit()
-
-        print(f"Inserted {inserted} new rows from {raw_path.name}")
+        inserted = insert_signals(conn, is_postgres, rows)
+        target = "AWS RDS PostgreSQL" if is_postgres else "SQLite"
+        print(f"Inserted/updated {inserted} rows from {raw_path.name} into {target}")
 
         return rows
 
@@ -112,8 +85,6 @@ def load_fuel_price_snapshot(
 
 
 if __name__ == "__main__":
-    import sys
-
     raw_dir = ROOT / "raw"
 
     if not raw_dir.exists():

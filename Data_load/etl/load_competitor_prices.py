@@ -1,26 +1,20 @@
 """
 Loads competitor price data scraped from Sastaticket.pk into the
-external_signals table in flight.db.
-
-The raw JSON has multiple fares per route (routes -> list of
-{airline, price_pkr}). Since external_signals has a
-UNIQUE(route, signal_type, recorded_date) constraint, each fare within
-a route gets a position-based signal_type (competitor_price_1,
-competitor_price_2, ...) so multiple fares for the same route/day don't
-silently collide and get dropped. The airline name is preserved in the
-`source` field instead of the signal_type, since airline detection from
-the page text isn't always reliable ("Unknown" happens).
-
-Run from the project root:
-    uv run python etl\\load_competitor_prices.py
+external_signals table in PostgreSQL (RDS) or SQLite (flight.db).
 """
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 
+try:
+    from db import get_connection, insert_signals
+except ImportError:
+    from Data_load.etl.db import get_connection, insert_signals
+
 ROOT = Path(__file__).resolve().parents[1]
-DB_PATH = ROOT / "flight.db"
+DEFAULT_DB_PATH = ROOT / "flight.db"
 RAW_DIR = ROOT / "raw"
 
 CREATE_TABLE_SQL = """
@@ -37,24 +31,25 @@ CREATE TABLE IF NOT EXISTS external_signals (
 );
 """
 
-INSERT_SQL = """
-INSERT OR IGNORE INTO external_signals (
-    route, signal_type, value, unit, source, recorded_date, scraped_at
-) VALUES (?, ?, ?, ?, ?, ?, ?)
-"""
-
 
 def ensure_table(conn: sqlite3.Connection) -> None:
     conn.execute(CREATE_TABLE_SQL)
     conn.commit()
 
 
-def load_competitor_snapshot(raw_path: Path, conn: sqlite3.Connection) -> int:
-    payload = json.loads(raw_path.read_text())
+def load_competitor_snapshot(raw_path: Path, conn=None) -> int:
+    payload = json.loads(raw_path.read_text(encoding="utf-8"))
 
     if "routes" not in payload:
         print(f"  Skipping {raw_path.name}: old format (no 'routes' key)")
         return 0
+
+    close_conn = False
+    if conn is None:
+        conn, is_postgres = get_connection()
+        close_conn = True
+    else:
+        is_postgres = not isinstance(conn, sqlite3.Connection)
 
     recorded_date = payload["scraped_date"]
 
@@ -67,44 +62,44 @@ def load_competitor_snapshot(raw_path: Path, conn: sqlite3.Connection) -> int:
                 continue
 
             rows.append(
-                (
-                    route,
-                    f"competitor_price_{idx}",
-                    float(price),
-                    "PKR",
-                    f"sastaticket:{airline}",
-                    recorded_date,
-                    payload.get("scraped_date"),
-                )
+                {
+                    "route": route,
+                    "signal_type": f"competitor_price_{idx}",
+                    "value": float(price),
+                    "unit": "PKR",
+                    "source": f"sastaticket:{airline}",
+                    "recorded_date": recorded_date,
+                    "scraped_at": payload.get("scraped_date"),
+                }
             )
 
-    inserted = 0
-    for row in rows:
-        cursor = conn.execute(INSERT_SQL, row)
-        if cursor.rowcount == 1:
-            inserted += 1
-
-    conn.commit()
-    return inserted
+    try:
+        return insert_signals(conn, is_postgres, rows)
+    finally:
+        if close_conn:
+            conn.close()
 
 
 def main():
-    conn = sqlite3.connect(DB_PATH)
-    ensure_table(conn)
+    conn, is_postgres = get_connection()
+    if not is_postgres:
+        ensure_table(conn)
 
     competitor_files = sorted(RAW_DIR.glob("competitor_prices_*.json"))
     if not competitor_files:
         print(f"No competitor_prices_*.json files found in {RAW_DIR}")
+        conn.close()
         return
 
+    target = "AWS RDS PostgreSQL" if is_postgres else "SQLite"
     total_inserted = 0
     for file_path in competitor_files:
         inserted = load_competitor_snapshot(file_path, conn)
-        print(f"{file_path.name}: {inserted} new row(s)")
+        print(f"{file_path.name}: {inserted} row(s) processed into {target}")
         total_inserted += inserted
 
     conn.close()
-    print(f"Done. Total new rows inserted: {total_inserted}")
+    print(f"Done. Total competitor rows processed: {total_inserted}")
 
 
 if __name__ == "__main__":

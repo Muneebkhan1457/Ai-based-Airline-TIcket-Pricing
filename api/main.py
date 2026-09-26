@@ -60,7 +60,7 @@ def trigger_etl():
         run_fuel_job()
         run_competitor_job()
         run_fx_job()
-        return {"status": "ok", "message": "All scrapers and ETL jobs completed locally."}
+        return {"status": "ok", "message": "All scrapers and ETL jobs completed successfully."}
     except Exception as e:
         return {"status": "partial_failure", "message": str(e)}
 
