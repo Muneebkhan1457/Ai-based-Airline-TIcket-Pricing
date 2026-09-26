@@ -8,6 +8,7 @@ Then run this dashboard:
     uv run streamlit run ui/app.py
 """
 import os
+import time
 import requests
 import streamlit as st
 
@@ -16,19 +17,38 @@ API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 ROUTES = ["KHI-LHE", "KHI-ISB", "KHI-DXB", "LHE-ISB", "KHI-PEW"]
 CLASSES = ["Economy", "Business"]
 
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
 def get_json_response(resp):
     try:
         return resp.json()
     except ValueError:
         return None
 
+
+@st.cache_data(ttl=30, show_spinner=False)
 def fetch_latest_prices():
+    """Fetched with a 30-second cache so the table auto-refreshes."""
     resp = requests.get(f"{API_BASE_URL}/pricing/history/latest", timeout=10)
     data = get_json_response(resp)
     if resp.status_code != 200:
         detail = data.get("detail") if isinstance(data, dict) else resp.text[:300]
         raise RuntimeError(detail or "Could not load latest price history.")
     return data or []
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def fetch_signals_history():
+    """Fetched with a 30-second cache."""
+    resp = requests.get(f"{API_BASE_URL}/signals/history", timeout=10)
+    data = get_json_response(resp)
+    if resp.status_code != 200:
+        detail = data.get("detail") if isinstance(data, dict) else resp.text[:300]
+        raise RuntimeError(detail or "Could not load market signals history.")
+    return data or []
+
 
 def render_latest_price_table():
     try:
@@ -38,7 +58,7 @@ def render_latest_price_table():
         return
 
     if not latest_prices:
-        st.info("No batch repricing history yet.")
+        st.info("No batch repricing history yet. Click **Reprice ALL Routes** to generate your first batch.")
         return
 
     rows = []
@@ -51,15 +71,8 @@ def render_latest_price_table():
             "Predicted Demand (%)": round(item["predicted_demand_ratio"] * 100, 2) if item["predicted_demand_ratio"] is not None else None,
             "Updated At": item["recorded_at"],
         })
-    st.dataframe(rows, hide_index=True, width='stretch')
+    st.dataframe(rows, hide_index=True, use_container_width=True)
 
-def fetch_signals_history():
-    resp = requests.get(f"{API_BASE_URL}/signals/history", timeout=10)
-    data = get_json_response(resp)
-    if resp.status_code != 200:
-        detail = data.get("detail") if isinstance(data, dict) else resp.text[:300]
-        raise RuntimeError(detail or "Could not load market signals history.")
-    return data or []
 
 def render_signals_history_table():
     try:
@@ -80,10 +93,15 @@ def render_signals_history_table():
             "Value": item.get("value"),
             "Recorded Date": item.get("recorded_date"),
         })
-    st.dataframe(rows, hide_index=True, width='stretch')
+    st.dataframe(rows, hide_index=True, use_container_width=True)
+
+
+# ---------------------------------------------------------------------------
+# Page layout
+# ---------------------------------------------------------------------------
 
 st.set_page_config(page_title="PIA Dynamic Pricing Cockpit", layout="wide")
-st.title("PIA Dynamic Pricing (Revenue Management Cockpit)")
+st.title("PIA Dynamic Pricing — Revenue Management Cockpit")
 
 # --- Sidebar: API health check ---
 with st.sidebar:
@@ -94,8 +112,8 @@ with st.sidebar:
             st.success("API: Connected")
         else:
             st.warning("API: Degraded")
-        st.write(f"Database: {'OK' if health['database_connected'] else 'Unavailable'}")
-        st.write(f"Model loaded: {'OK' if health['model_loaded'] else 'Unavailable'}")
+        st.write(f"Database: {'✅ OK' if health['database_connected'] else '❌ Unavailable'}")
+        st.write(f"Model loaded: {'✅ OK' if health['model_loaded'] else '❌ Unavailable'}")
     except requests.exceptions.Timeout:
         st.warning("API Timeout: The local API is busy or loading the MLflow model...")
     except requests.exceptions.ConnectionError:
@@ -103,7 +121,7 @@ with st.sidebar:
         st.stop()
 
     st.divider()
-    if st.button("Trigger Manual ETL Refresh"):
+    if st.button("🔄 Trigger Manual ETL Refresh"):
         with st.spinner("Running scrapers..."):
             try:
                 resp = requests.post(f"{API_BASE_URL}/signals/trigger-etl", timeout=120).json()
@@ -111,9 +129,19 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"ETL trigger failed: {e}")
 
+    st.divider()
+    # Manual cache-clear button so users can force a refresh anytime
+    if st.button("🗑️ Clear Data Cache"):
+        fetch_latest_prices.clear()
+        fetch_signals_history.clear()
+        st.success("Cache cleared — data will reload on next render.")
+        st.rerun()
+
 tab1, tab2, tab3 = st.tabs(["Live Pricing", "Elasticity Simulator", "Market Signals"])
 
-# --- Tab 1: Live Pricing Dashboard ---
+# ---------------------------------------------------------------------------
+# Tab 1: Live Pricing Dashboard
+# ---------------------------------------------------------------------------
 with tab1:
     st.subheader("Get Price Recommendation")
     col1, col2, col3 = st.columns(3)
@@ -147,17 +175,19 @@ with tab1:
                     m2.metric("Expected Revenue", f"{data['expected_revenue']:,.0f} PKR")
                     m3.metric("Predicted Demand", f"{data['predicted_demand_ratio'] * 100:.1f}%")
                     if data["competitor_data_is_real"]:
-                        st.caption("Priced with real competitor data")
+                        st.caption("✅ Priced with real competitor data")
                     else:
-                        st.caption("No real competitor data for this route -- price based on guardrails only")
+                        st.caption("⚠️ No real competitor data for this route — price based on guardrails only")
                 else:
                     st.error(resp.json().get("detail", "Unknown error"))
             except Exception as e:
                 st.error(f"Request failed: {e}")
 
     st.divider()
-    if st.button("Reprice ALL Routes (Batch)"):
-        st.info("Repricing in progress... This may take a few minutes as it re-scrapes live competitor and fuel data.")
+
+    # Batch reprice button
+    if st.button("🔁 Reprice ALL Routes (Batch)"):
+        st.info("Repricing in progress… This may take a few minutes as it re-scrapes live competitor and fuel data.")
         with st.spinner("Running full repricing cycle..."):
             try:
                 resp = requests.post(f"{API_BASE_URL}/pricing/batch-reprice", timeout=300)
@@ -165,18 +195,24 @@ with tab1:
                 if data is None:
                     st.error(f"Batch reprice failed: API returned non-JSON response ({resp.status_code}).")
                     st.code(resp.text[:1000] or "<empty response>")
-                    st.stop()
-
-                if resp.status_code == 200:
+                elif resp.status_code == 200:
                     st.success(data["message"])
-                    st.subheader("Latest Batch Recommended Prices")
-                    render_latest_price_table()
+                    # Clear the cache so the table below immediately shows new data
+                    fetch_latest_prices.clear()
+                    time.sleep(0.5)          # give the DB a moment to flush
+                    st.rerun()               # forces a full re-render with fresh data
                 else:
                     st.error(data.get("detail", "Batch reprice failed."))
             except Exception as e:
                 st.error(f"Batch reprice failed: {e}")
 
-# --- Tab 2: Elasticity Simulator ---
+    # Always-visible latest prices table (auto-refreshes every 30 s via cache TTL)
+    st.subheader("Latest Batch Recommended Prices")
+    render_latest_price_table()
+
+# ---------------------------------------------------------------------------
+# Tab 2: Elasticity Simulator
+# ---------------------------------------------------------------------------
 with tab2:
     st.subheader("Price Elasticity Simulator")
     st.caption("See how predicted demand changes as price varies, for a fixed route/context.")
@@ -205,9 +241,10 @@ with tab2:
                     demands.append(None)
         st.line_chart({"price": prices, "predicted_demand": demands}, x="price", y="predicted_demand")
 
-# --- Tab 3: Market Signal Monitor ---
+# ---------------------------------------------------------------------------
+# Tab 3: Market Signal Monitor
+# ---------------------------------------------------------------------------
 with tab3:
     st.subheader("Market Signals & Autopilot Log")
-    st.caption("Recent market signal updates (fuel, FX, competitor prices) retrieved from local SQLite database.")
+    st.caption("Recent market signal updates (fuel, FX, competitor prices) retrieved from the database.")
     render_signals_history_table()
-

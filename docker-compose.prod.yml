@@ -1,0 +1,28 @@
+# Production docker-compose — EC2 pe use hota hai
+# Local build nahi karta, Docker Hub se ready images pull karta hai
+# GitHub Actions automatically yahan se images update karta hai
+
+services:
+  api:
+    image: ${DOCKERHUB_USERNAME}/pia-pricing-api:latest
+    container_name: ticket_pricing_api
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./Data_load:/app/Data_load
+    env_file:
+      - .env
+
+  ui:
+    image: ${DOCKERHUB_USERNAME}/pia-pricing-ui:latest
+    container_name: ticket_pricing_ui
+    restart: always
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    environment:
+      - API_URL=http://api:8000
+    env_file:
+      - .env
