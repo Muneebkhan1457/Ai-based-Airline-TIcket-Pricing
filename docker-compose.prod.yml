@@ -9,8 +9,6 @@ services:
     restart: always
     ports:
       - "8000:8000"
-    volumes:
-      - ./Data_load:/app/Data_load
     env_file:
       - .env
 
