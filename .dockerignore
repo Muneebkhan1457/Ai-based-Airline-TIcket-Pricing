@@ -1,7 +1,15 @@
+.env
+.env.*
+*.pem
+*.key
 .venv/
+venv/
 __pycache__/
 .pytest_cache/
 .git/
 .dvc/
 models/training_dataset.csv
 Data_load/raw/
+*.db
+*.sqlite
+*.sqlite3
