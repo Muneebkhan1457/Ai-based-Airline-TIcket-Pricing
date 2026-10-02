@@ -34,18 +34,27 @@ _using_postgres = False
 
 def _get_connection():
     """Return a DB connection.
-    - If DATABASE_URL env var is set and psycopg2 is available → PostgreSQL (AWS RDS)
-    - Otherwise → local SQLite fallback (for offline development & testing)
+    - If DATABASE_URL env var is set and psycopg2 is available → tries PostgreSQL (AWS RDS)
+    - If connection fails or DATABASE_URL not set → falls back to local SQLite (flight.db)
     """
     global _connection, _using_postgres
     if _connection is None:
         db_url = os.getenv("DATABASE_URL")
         if db_url and _PSYCOPG2_AVAILABLE:
-            dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
-            _connection = psycopg2.connect(dsn)
-            _connection.autocommit = False
-            _using_postgres = True
-            print("[DB] Connected to PostgreSQL (AWS RDS)")
+            try:
+                dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
+                if "connect_timeout" not in dsn:
+                    dsn += "&connect_timeout=3" if "?" in dsn else "?connect_timeout=3"
+                _connection = psycopg2.connect(dsn)
+                _connection.autocommit = False
+                _using_postgres = True
+                print("[DB] Connected to PostgreSQL (AWS RDS)")
+            except Exception as e:
+                print(f"[DB] RDS connection failed: {e}. Falling back to local SQLite.")
+                db_path = Path(__file__).resolve().parents[1] / "Data_load" / "flight.db"
+                _connection = sqlite3.connect(str(db_path), check_same_thread=False)
+                _using_postgres = False
+                print("[DB] Connected to local SQLite fallback")
         else:
             db_path = Path(__file__).resolve().parents[1] / "Data_load" / "flight.db"
             _connection = sqlite3.connect(str(db_path), check_same_thread=False)

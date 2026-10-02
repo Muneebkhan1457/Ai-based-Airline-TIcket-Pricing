@@ -25,26 +25,32 @@ def init_db():
     """Ensure price_history table exists in PostgreSQL (if DATABASE_URL set) or SQLite."""
     db_url = os.getenv("DATABASE_URL")
     if db_url and _PSYCOPG2_AVAILABLE:
-        dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
-        conn = psycopg2.connect(dsn)
-        with conn.cursor() as cur:
-            cur.execute("""
-            CREATE TABLE IF NOT EXISTS price_history (
-                id SERIAL PRIMARY KEY,
-                route TEXT NOT NULL,
-                flight_class TEXT NOT NULL,
-                price REAL NOT NULL,
-                expected_revenue REAL,
-                predicted_demand_ratio REAL,
-                trigger_reason TEXT,
-                recorded_at TEXT NOT NULL
-            );
-            """)
-        conn.commit()
-        conn.close()
-        print("[Scheduler] Initialized price_history on PostgreSQL (AWS RDS).")
-    else:
-        conn = sqlite3.connect(DB_PATH)
+        try:
+            dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
+            if "connect_timeout" not in dsn:
+                dsn += "&connect_timeout=3" if "?" in dsn else "?connect_timeout=3"
+            conn = psycopg2.connect(dsn)
+            with conn.cursor() as cur:
+                cur.execute("""
+                CREATE TABLE IF NOT EXISTS price_history (
+                    id SERIAL PRIMARY KEY,
+                    route TEXT NOT NULL,
+                    flight_class TEXT NOT NULL,
+                    price REAL NOT NULL,
+                    expected_revenue REAL,
+                    predicted_demand_ratio REAL,
+                    trigger_reason TEXT,
+                    recorded_at TEXT NOT NULL
+                );
+                """)
+            conn.commit()
+            conn.close()
+            print("[Scheduler] Initialized price_history on PostgreSQL (AWS RDS).")
+            return
+        except Exception as e:
+            print(f"[Scheduler] RDS init failed: {e}. Falling back to SQLite.")
+
+    conn = sqlite3.connect(DB_PATH)
         conn.execute("""
         CREATE TABLE IF NOT EXISTS price_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

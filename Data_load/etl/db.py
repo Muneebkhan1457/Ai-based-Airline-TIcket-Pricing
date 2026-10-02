@@ -26,9 +26,15 @@ def get_connection(db_path: Optional[Path | str] = None):
 
     db_url = os.getenv("DATABASE_URL")
     if db_url and _PSYCOPG2_AVAILABLE:
-        dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
-        conn = psycopg2.connect(dsn)
-        return conn, True
+        try:
+            dsn = db_url if "sslmode" in db_url else db_url + "?sslmode=require"
+            if "connect_timeout" not in dsn:
+                dsn += "&connect_timeout=3" if "?" in dsn else "?connect_timeout=3"
+            conn = psycopg2.connect(dsn)
+            return conn, True
+        except Exception as e:
+            print(f"[ETL DB] RDS connection failed: {e}. Falling back to SQLite.")
+            return sqlite3.connect(str(DEFAULT_DB_PATH)), False
     else:
         return sqlite3.connect(str(DEFAULT_DB_PATH)), False
 
