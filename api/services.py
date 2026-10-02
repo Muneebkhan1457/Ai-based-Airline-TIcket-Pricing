@@ -95,7 +95,16 @@ def _get_latest_model_version() -> int:
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000"))
     client = MlflowClient()
     try:
-        versions = client.search_model_versions(f"name='pia-demand-model'")
+        # 1. Try to load registered champion alias
+        try:
+            mv = client.get_model_version_by_alias("pia-demand-model", "champion")
+            if mv:
+                return int(mv.version)
+        except Exception:
+            pass
+
+        # 2. Fall back to highest registered version
+        versions = client.search_model_versions("name='pia-demand-model'")
         if versions:
             return max(int(v.version) for v in versions)
         return 1
